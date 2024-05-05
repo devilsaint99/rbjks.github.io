@@ -1,0 +1,38 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - deployment
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.4
+
+      - name: Extract PR descriptions
+        id: extarct_pr_descriptions
+        run: |
+          PR_DESCRIPTIONS=""
+          for pr_id in $(git log --format=%s ${{ github.event.before }}..${{ github.sha }} | grep -o 'pull request #\([0-9]*\)'); do
+            pr_num=$(echo $pr_id | cut -d'#' -f2)
+            pr_description=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                            -H "Accept: application/vnd.github.v3+json" \
+                            https://api.github.com/repos/${{ github.repository }}/pulls/$pr_num | jq -r '.title')
+            PR_DESCRIPTIONS="$PR_DESCRIPTIONS\n- $pr_description"
+          done
+          echo "::set-output name=pr_descriptions::$PR_DESCRIPTIONS"
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.sha }}
+          release_name: Release ${{ github.sha }}
+          body: |
+            Changes in this release:
+            ${{ steps.extract_pr_descriptions.outputs.pr_descriptions }}
+          draft: false
+          prerelease: false
